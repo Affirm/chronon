@@ -1,0 +1,85 @@
+{
+  "metaData": {
+    "name": "bootcamp.user_purchase_features.v1",
+    "online": 1,
+    "customJson": "{\"lag\": 0, \"groupby_tags\": null, \"column_tags\": {}}",
+    "dependencies": [
+      "{\"name\": \"wait_for_bootcamp.purchases_iceberg_ds\", \"spec\": \"bootcamp.purchases_iceberg/ds={{ ds }}\", \"start\": null, \"end\": null}"
+    ],
+    "tableProperties": {
+      "source": "chronon"
+    },
+    "outputNamespace": "bootcamp_features",
+    "team": "bootcamp",
+    "offlineSchedule": "@daily"
+  },
+  "sources": [
+    {
+      "events": {
+        "table": "bootcamp.purchases_iceberg",
+        "query": {
+          "selects": {
+            "user_id": "user_id",
+            "purchase_price": "purchase_price",
+            "item_category": "item_category"
+          },
+          "timeColumn": "ts",
+          "setups": [
+            "\n                CREATE TABLE IF NOT EXISTS bootcamp.purchases_iceberg\n                USING iceberg\n                AS SELECT * FROM data.purchases\n                "
+          ]
+        }
+      }
+    }
+  ],
+  "keyColumns": [
+    "user_id"
+  ],
+  "aggregations": [
+    {
+      "inputColumn": "purchase_price",
+      "operation": 7,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "purchase_price",
+      "operation": 6,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "purchase_price",
+      "operation": 8,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    }
+  ],
+  "backfillStartDate": "2023-12-01"
+}
