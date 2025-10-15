@@ -31,6 +31,26 @@ services:
       timeout: 10s
       retries: 3
 
+  polaris:
+    image: apache/polaris:latest
+    ports:
+      - "8181:8181"
+    environment:
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+    depends_on:
+      minio:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8182/q/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    volumes:
+      - polaris_data:/var/polaris
+
   spark-master:
     image: apache/spark:3.5.2
     ports:
@@ -41,6 +61,9 @@ services:
       SPARK_MASTER_PORT: "7077"
       SPARK_MASTER_WEBUI_PORT: "8080"
       SPARK_DAEMON_JAVA_OPTS: -Dspark.deploy.recoveryMode=FILESYSTEM -Dspark.deploy.recoveryDirectory=/tmp/spark-recovery
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
     command:
       [
         "/opt/spark/bin/spark-class","org.apache.spark.deploy.master.Master",
@@ -48,6 +71,9 @@ services:
       ]
     volumes:
       - spark_events:/opt/spark/spark-events
+    depends_on:
+      polaris:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "ps -ef | grep -q '[o]rg.apache.spark.deploy.master.Master' || exit 1; command -v wget >/dev/null 2>&1 && wget -qO- http://127.0.0.1:8080 >/dev/null || true"]
       interval: 5s
@@ -72,6 +98,9 @@ services:
       ]
     environment:
       SPARK_WORKER_DIR: /opt/spark/work-dir
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
     volumes:
       - spark_events:/opt/spark/spark-events
     restart: unless-stopped
@@ -97,12 +126,17 @@ services:
       CHRONON_ONLINE_ARGS: -Zuser=admin -Zpassword=admin -Zhost=mongodb -Zport=27017 -Zdatabase=admin
       SPARK_SQL_EXTENSIONS: org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
       SPARK_SQL_CATALOG_SPARK_CATALOG: org.apache.iceberg.spark.SparkSessionCatalog
-      SPARK_SQL_CATALOG_SPARK_CATALOG_TYPE: hive
+      SPARK_SQL_CATALOG_SPARK_CATALOG_TYPE: rest
+      SPARK_SQL_CATALOG_SPARK_CATALOG_URI: http://polaris:8181/api/catalog
       SPARK_SQL_CATALOG_SPARK_CATALOG_WAREHOUSE: s3a://chronon/warehouse
+      SPARK_SQL_CATALOG_SPARK_CATALOG_S3_ENDPOINT: http://minio:9000
+      SPARK_SQL_CATALOG_SPARK_CATALOG_S3_PATH_STYLE_ACCESS: "true"
       SPARK_CHRONON_TABLE_WRITE_FORMAT: iceberg
+      
       SPARK_CHRONON_TABLE_READ_FORMAT: iceberg
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
       S3_ENDPOINT: http://minio:9000
       S3_PATH_STYLE_ACCESS: "true"
     volumes:
@@ -113,6 +147,7 @@ services:
       - spark-master
       - minio
       - mongodb
+      - polaris
 
   jupyter:
     image: jupyter/pyspark-notebook:latest
@@ -133,3 +168,4 @@ volumes:
   minio_data:
   mongodb_data:
   spark_events:
+  polaris_data:
