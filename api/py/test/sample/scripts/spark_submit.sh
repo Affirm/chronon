@@ -45,7 +45,7 @@ log4j.appender.stdout.layout.ConversionPattern=[%d{yyyy-MM-dd HH:mm:ss}] {%c{1}}
 log4j.logger.ai.chronon=INFO
 EOF
 $SPARK_SUBMIT_PATH \
---packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.10.0,org.apache.hadoop:hadoop-aws:3.3.6 \
+--packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.10.0,org.apache.hadoop:hadoop-aws:3.3.4 \
 --driver-java-options " -Dlog4j.configuration=file:${LOG4J_FILE}" \
 --conf "spark.executor.extraJavaOptions= -XX:ParallelGCThreads=4 -XX:+UseParallelGC -XX:+UseCompressedOops" \
 --conf spark.sql.shuffle.partitions=${PARALLELISM:-4000} \
@@ -59,10 +59,8 @@ $SPARK_SUBMIT_PATH \
 --conf spark.chronon.backfill.validation.enabled="${ENABLE_VALIDATION:-false}" \
 --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions \
 --conf spark.sql.catalog.spark_catalog=org.apache.iceberg.spark.SparkCatalog \
---conf spark.sql.catalog.spark_catalog.type=rest \
---conf spark.sql.catalog.spark_catalog.uri=http://polaris:8181/api/catalog \
+--conf spark.sql.catalog.spark_catalog.type=hadoop \
 --conf spark.sql.catalog.spark_catalog.warehouse=s3a://chronon/warehouse \
---conf spark.sql.catalog.spark_catalog.io-impl=org.apache.iceberg.aws.s3.S3FileIO \
 --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000 \
 --conf spark.hadoop.fs.s3a.path.style.access=true \
 --conf spark.hadoop.fs.s3a.access.key=minioadmin \
