@@ -53,3 +53,10 @@ releases
 
 # bazel
 bazel-*
+
+# Build artifacts from Docker builds
+thrift-0.13.0/
+thrift-*.tar.gz
+sbt-*.tgz*
+sbt/
+
