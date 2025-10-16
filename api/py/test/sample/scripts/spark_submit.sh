@@ -45,6 +45,7 @@ log4j.appender.stdout.layout.ConversionPattern=[%d{yyyy-MM-dd HH:mm:ss}] {%c{1}}
 log4j.logger.ai.chronon=INFO
 EOF
 $SPARK_SUBMIT_PATH \
+--packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.10.0,org.apache.hadoop:hadoop-aws:3.3.4 \
 --driver-java-options " -Dlog4j.configuration=file:${LOG4J_FILE}" \
 --conf "spark.executor.extraJavaOptions= -XX:ParallelGCThreads=4 -XX:+UseParallelGC -XX:+UseCompressedOops" \
 --conf spark.sql.shuffle.partitions=${PARALLELISM:-4000} \
@@ -56,8 +57,18 @@ $SPARK_SUBMIT_PATH \
 --conf spark.chronon.partition.column="${PARTITION_COLUMN:-ds}" \
 --conf spark.chronon.partition.format="${PARTITION_FORMAT:-yyyy-MM-dd}" \
 --conf spark.chronon.backfill.validation.enabled="${ENABLE_VALIDATION:-false}" \
+--conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions \
+--conf spark.sql.catalog.spark_catalog=org.apache.iceberg.spark.SparkCatalog \
+--conf spark.sql.catalog.spark_catalog.type=hadoop \
+--conf spark.sql.catalog.spark_catalog.warehouse=s3a://chronon/warehouse \
+--conf spark.hadoop.fs.s3a.endpoint=http://minio:9000 \
+--conf spark.hadoop.fs.s3a.path.style.access=true \
+--conf spark.hadoop.fs.s3a.access.key=minioadmin \
+--conf spark.hadoop.fs.s3a.secret.key=minioadmin \
+--conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem \
+--conf spark.chronon.table_write.format=iceberg \
 --deploy-mode client \
---master "${JOB_MODE:-yarn}" \
+--master "${JOB_MODE:-spark://spark-master:7077}" \
 --executor-memory "${EXECUTOR_MEMORY:-2G}" \
 --driver-memory "${DRIVER_MEMORY:-1G}" \
 --conf spark.app.name=${APP_NAME} \

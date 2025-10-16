@@ -44,7 +44,7 @@ import xerial.sbt.Sonatype.sonatypeCentralHost
 ThisBuild / sonatypeCredentialHost := sonatypeCentralHost
 
 val use_spark_3_5 = settingKey[Boolean]("Flag to build for 3.5")
-ThisBuild / use_spark_3_5 := false
+ThisBuild / use_spark_3_5 := true
 
 def buildTimestampSuffix = ";build.timestamp=" + new java.util.Date().getTime
 lazy val publishSettings = Seq(
@@ -266,7 +266,7 @@ lazy val api = project
       val outputJava = (Compile / sourceManaged).value
       Thrift.gen(inputThrift.getPath, outputJava.getPath, "java")
     }.taskValue,
-    sourceGenerators in Compile += python_api_build.taskValue,
+    // sourceGenerators in Compile += python_api_build.taskValue, // TEMPORARILY DISABLED FOR BUILD
     crossScalaVersions := supportedVersions,
     libraryDependencies ++=
       fromMatrix(scalaVersion.value, "spark-sql/provided") ++
