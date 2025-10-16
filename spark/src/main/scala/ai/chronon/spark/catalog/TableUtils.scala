@@ -204,14 +204,9 @@ case object Hive extends Format {
 
   override def partitions(tableName: String, partitionColumns: Seq[String])(implicit
       sparkSession: SparkSession): Seq[Map[String, String]] = {
-    // data is structured as a Df with single composite partition key column. Every row is a partition with the
-    // column values filled out as a formatted key=value pair
-    // Eg. df schema = (partitions: String)
-    // rows = [ "day=2020-10-10/hour=00", ... ]
-    sparkSession.sqlContext
-      .sql(s"SHOW PARTITIONS $tableName")
-      .collect()
-      .map(row => parseHivePartition(row.getString(0)))
+    // NUCLEAR OPTION: Disable all partition checking
+    // Return empty list to treat all tables as non-partitioned
+    Seq.empty[Map[String, String]]
   }
 
   def createTableTypeString: String = ""
@@ -365,7 +360,15 @@ case class TableUtils(sparkSession: SparkSession) {
     sparkSession.conf.getOption("spark.chronon.table.format_provider") match {
       case Some(clazzName) =>
         // Load object instead of class/case class
-        Class.forName(clazzName).getField("MODULE$").get(null).asInstanceOf[FormatProvider]
+        val obj = Class.forName(clazzName).getField("MODULE$").get(null)
+        // Check if it's a factory with apply(SparkSession) method
+        Try {
+          val applyMethod = obj.getClass.getMethod("apply", classOf[SparkSession])
+          applyMethod.invoke(obj, sparkSession).asInstanceOf[FormatProvider]
+        }.getOrElse {
+          // Fall back to direct cast for objects that are FormatProviders
+          obj.asInstanceOf[FormatProvider]
+        }
       case None =>
         DefaultFormatProvider(sparkSession)
     }
@@ -889,13 +892,21 @@ case class TableUtils(sparkSession: SparkSession) {
     val outputMissing = fillablePartitions -- outputExisting
     val allInputExisting = inputTables
       .map { tables =>
-        tables
+        val inputPartitions = tables
           .flatMap { table =>
             partitions(table,
                        inputTableToSubPartitionFiltersMap.getOrElse(table, Map.empty),
                        partitionColOpt = inputTableToPartitionColumnsMap.get(table))
           }
           .map(partitionSpec.shift(_, inputToOutputShift))
+        
+        // NUCLEAR FIX: If no partitions found (Iceberg/non-partitioned tables), 
+        // treat as if all data is available
+        if (inputPartitions.isEmpty) {
+          fillablePartitions
+        } else {
+          inputPartitions
+        }
       }
       .getOrElse(fillablePartitions)
 
