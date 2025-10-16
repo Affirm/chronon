@@ -117,37 +117,57 @@ services:
 
   # Spark Master
   spark-master:
-    image: bitnami/spark:3.5.0
+    image: apache/spark:3.5.2
     ports:
-      - "8080:8080"  # Spark UI
-      - "7077:7077"  # Spark Master
+      - "8080:8080"
+      - "7077:7077"
     environment:
-      - SPARK_MODE=master
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+      SPARK_MASTER_HOST: spark-master
+      SPARK_MASTER_PORT: "7077"
+      SPARK_MASTER_WEBUI_PORT: "8080"
+      SPARK_DAEMON_JAVA_OPTS: -Dspark.deploy.recoveryMode=FILESYSTEM -Dspark.deploy.recoveryDirectory=/tmp/spark-recovery
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+    command:
+      [
+        "/opt/spark/bin/spark-class","org.apache.spark.deploy.master.Master",
+        "--host","spark-master","--port","7077","--webui-port","8080"
+      ]
     volumes:
-      - spark_events:/opt/bitnami/spark/spark-events
+      - spark_events:/opt/spark/spark-events
+    healthcheck:
+      test: ["CMD-SHELL", "ps -ef | grep -q '[o]rg.apache.spark.deploy.master.Master' || exit 1; wget -qO- http://127.0.0.1:8080 >/dev/null || true"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 5s
+    restart: unless-stopped
 
-  # Spark Worker
   spark-worker:
-    image: bitnami/spark:3.5.0
+    image: apache/spark:3.5.2
     depends_on:
-      - spark-master
-      - minio
+      spark-master:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    command:
+      [
+        "/opt/spark/bin/spark-class","org.apache.spark.deploy.worker.Worker",
+        "spark://spark-master:7077",
+        "--cores","2","--memory","2G",
+        "--webui-port","8081"
+      ]
     environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=2G
-      - SPARK_WORKER_CORES=2
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
-    volumes: []
-    scale: 2
+      SPARK_WORKER_DIR: /opt/spark/work-dir
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+    volumes:
+      - spark_events:/opt/spark/spark-events
+    restart: unless-stopped
 
+    
   # Chronon Main Container with all components
   chronon-main:
     image: ezvz/chronon
@@ -156,33 +176,44 @@ services:
       - "4040:4040"  # Spark UI
       - "4041:4041"  # Spark UI (backup)
     environment:
-      - USER=root
-      - SPARK_SUBMIT_PATH=spark-submit
-      - PYTHONPATH=/srv/chronon
-      - SPARK_VERSION=3.5.2
-      - JOB_MODE=spark://spark-master:7077
-      - PARALLELISM=4
-      - EXECUTOR_MEMORY=2G
-      - EXECUTOR_CORES=2
-      - DRIVER_MEMORY=1G
-      - CHRONON_LOG_TABLE=default.chronon_log_table
-      - CHRONON_ONLINE_CLASS=ai.chronon.quickstart.online.ChrononMongoOnlineImpl
-      - CHRONON_ONLINE_ARGS=-Zuser=admin -Zpassword=admin -Zhost=mongodb -Zport=27017 -Zdatabase=admin
-      # Iceberg Configuration with Spark's built-in Hive catalog
-      - SPARK_SQL_EXTENSIONS=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
-      - SPARK_SQL_CATALOG_SPARK_CATALOG=org.apache.iceberg.spark.SparkSessionCatalog
-      - SPARK_SQL_CATALOG_SPARK_CATALOG_TYPE=hive
-      - SPARK_SQL_CATALOG_SPARK_CATALOG_WAREHOUSE=s3a://chronon/warehouse
-      - SPARK_CHRONON_TABLE_WRITE_FORMAT=iceberg
-      - SPARK_CHRONON_TABLE_READ_FORMAT=iceberg
-      # S3 Configuration
-      - AWS_ACCESS_KEY_ID=minioadmin
-      - AWS_SECRET_ACCESS_KEY=minioadmin
-      - S3_ENDPOINT=http://minio:9000
-      - S3_PATH_STYLE_ACCESS=true
+      USER: root
+      SPARK_SUBMIT_PATH: spark-submit
+      PYTHONPATH: /srv/chronon
+      SPARK_VERSION: "3.5.2"
+      JOB_MODE: spark://spark-master:7077
+      PARALLELISM: "4"
+      EXECUTOR_MEMORY: 2G
+      EXECUTOR_CORES: "2"
+      DRIVER_MEMORY: 1G
+      CHRONON_LOG_TABLE: default.chronon_log_table
+      CHRONON_ONLINE_CLASS: ai.chronon.quickstart.online.ChrononMongoOnlineImpl
+      CHRONON_ONLINE_ARGS: -Zuser=admin -Zpassword=admin -Zhost=mongodb -Zport=27017 -Zdatabase=admin
+      SPARK_CHRONON_TABLE_WRITE_FORMAT: iceberg
+      SPARK_CHRONON_TABLE_READ_FORMAT: iceberg
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      S3_ENDPOINT: http://minio:9000
+      S3_PATH_STYLE_ACCESS: "true"
       # DynamoDB Configuration
-      - AWS_DEFAULT_REGION=us-east-1
-      - DYNAMODB_ENDPOINT=http://dynamodb:8000
+      AWS_DEFAULT_REGION: us-east-1
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+
+      # === Iceberg Configuration with Hadoop catalog ===
+      PYSPARK_SUBMIT_ARGS: >
+        --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.10.0,org.apache.hadoop:hadoop-aws:3.3.4
+        --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+        --conf spark.sql.defaultCatalog=spark_catalog
+        --conf spark.sql.catalog.spark_catalog=org.apache.iceberg.spark.SparkCatalog
+        --conf spark.sql.catalog.spark_catalog.type=hadoop
+        --conf spark.sql.catalog.spark_catalog.warehouse=s3a://chronon/warehouse
+        --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000
+        --conf spark.hadoop.fs.s3a.path.style.access=true
+        --conf spark.hadoop.fs.s3a.access.key=minioadmin
+        --conf spark.hadoop.fs.s3a.secret.key=minioadmin
+        --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+        --conf spark.hadoop.fs.s3a.aws.credentials.provider=org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
+        pyspark-shell
     volumes:
       - ../api/py/test/sample:/srv/chronon
       - ./scripts:/srv/scripts
@@ -200,9 +231,25 @@ services:
     ports:
       - "8888:8888"
     environment:
-      - JUPYTER_ENABLE_LAB=yes
-      - SPARK_MASTER=spark://spark-master:7077
-      - JUPYTER_TOKEN=chronon-dev
+      JUPYTER_ENABLE_LAB: "yes"
+      SPARK_MASTER: spark://spark-master:7077
+      JUPYTER_TOKEN: chronon-dev
+
+      # === Iceberg Configuration with Hadoop catalog ===
+      PYSPARK_SUBMIT_ARGS: >
+        --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.10.0,org.apache.hadoop:hadoop-aws:3.3.4
+        --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+        --conf spark.sql.defaultCatalog=spark_catalog
+        --conf spark.sql.catalog.spark_catalog=org.apache.iceberg.spark.SparkCatalog
+        --conf spark.sql.catalog.spark_catalog.type=hadoop
+        --conf spark.sql.catalog.spark_catalog.warehouse=s3a://chronon/warehouse
+        --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000
+        --conf spark.hadoop.fs.s3a.path.style.access=true
+        --conf spark.hadoop.fs.s3a.access.key=minioadmin
+        --conf spark.hadoop.fs.s3a.secret.key=minioadmin
+        --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+        --conf spark.hadoop.fs.s3a.aws.credentials.provider=org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
+        pyspark-shell
     volumes:
       - ../api/py:/home/jovyan/work/chronon-api
       - ../api/py/test/sample:/home/jovyan/work/sample-data
