@@ -1,0 +1,16 @@
+{
+  "metaData": {
+    "name": "bootcamp.purchases_from_s3.v1",
+    "dependencies": [],
+    "tableProperties": {
+      "provider": "iceberg",
+      "format-version": "2",
+      "write.format.default": "parquet"
+    },
+    "outputNamespace": "bootcamp",
+    "team": "bootcamp"
+  },
+  "query": "\nSELECT\n    user_id,\n    purchase_price,\n    item_category,\n    ts,\n    ds\nFROM data.purchases\nWHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'\n",
+  "startPartition": "2023-12-01",
+  "setups": []
+}

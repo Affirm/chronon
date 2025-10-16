@@ -65,5 +65,9 @@
   "cs_ds": {
         "description": "Used for unit testing purposes",
         "namespace": "default"
+    },
+    "bootcamp": {
+        "description": "Bootcamp S3 to Iceberg pipeline",
+        "namespace": "bootcamp"
     }
 }
