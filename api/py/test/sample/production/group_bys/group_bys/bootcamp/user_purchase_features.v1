@@ -3,9 +3,6 @@
     "name": "bootcamp.user_purchase_features.v1",
     "online": 1,
     "customJson": "{\"lag\": 0, \"groupby_tags\": null, \"column_tags\": {}}",
-    "dependencies": [
-      "{\"name\": \"wait_for_bootcamp.purchases_iceberg_ds\", \"spec\": \"bootcamp.purchases_iceberg/ds={{ ds }}\", \"start\": null, \"end\": null}"
-    ],
     "tableProperties": {
       "source": "chronon"
     },
@@ -25,7 +22,7 @@
           },
           "timeColumn": "ts",
           "setups": [
-            "\n                CREATE TABLE IF NOT EXISTS bootcamp.purchases_iceberg\n                USING iceberg\n                AS SELECT * FROM data.purchases\n                "
+            "CREATE TABLE IF NOT EXISTS bootcamp.purchases_iceberg USING iceberg AS SELECT user_id, purchase_price, item_category, DATE_FORMAT(ts, 'yyyy-MM-dd') as ds, CAST(UNIX_TIMESTAMP(ts) * 1000 AS BIGINT) as ts FROM data.purchases"
           ]
         }
       }

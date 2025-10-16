@@ -66,6 +66,7 @@ $SPARK_SUBMIT_PATH \
 --conf spark.hadoop.fs.s3a.access.key=minioadmin \
 --conf spark.hadoop.fs.s3a.secret.key=minioadmin \
 --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem \
+--conf spark.chronon.table_write.format=iceberg \
 --deploy-mode client \
 --master "${JOB_MODE:-spark://spark-master:7077}" \
 --executor-memory "${EXECUTOR_MEMORY:-2G}" \
